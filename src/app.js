@@ -11,10 +11,14 @@ import {
   AmbientLight,
   DirectionalLight,
   GridHelper,
-  PlaneBufferGeometry,
+  PlaneGeometry,
   MeshStandardMaterial,
   Mesh,
   DoubleSide,
+  Path,
+  ExtrudeGeometry,
+  Vector2,
+  Shape,
   SphereBufferGeometry,
 } from 'three';
 import Stats from 'stats-js';
@@ -36,7 +40,7 @@ class App {
     this.addFloor();
     this.addFloorGrid();
     this.addFloorHelper();
-    this.addSphere({ x: 0, y: 2, z: 0 });
+    this.addBox();
     this.addAxisHelper();
     this.addStatsMonitor();
     this.addWindowListeners();
@@ -164,7 +168,7 @@ class App {
   }
 
   addFloor() {
-    const geometry = new PlaneBufferGeometry(20, 20);
+    const geometry = new PlaneGeometry(20, 20);
     const material = new MeshStandardMaterial({ color: this.colors.floor, side: DoubleSide });
 
     this.floor = new Mesh(geometry, material);
@@ -181,6 +185,55 @@ class App {
     this.controls.enabled = false;
     this.controls.attach(this.floor);
     this.scene.add(this.controls);
+  }
+
+  createShape() {
+    const size = 5;
+    const vectors = [
+      new Vector2(-size, size),
+      new Vector2(-size, -size),
+      new Vector2(size, -size),
+      new Vector2(size, size)
+    ];
+
+    const shape = new Shape(vectors);
+
+    return shape;
+  }
+
+  createHole(shape, x, z) {
+    const radius = 3;
+    const holePath = new Path();
+
+    holePath.moveTo(x, z);
+    holePath.ellipse(x, z, radius, radius, 0, Math.PI * 2);
+
+    shape.holes.push(holePath);
+  }
+
+  addBox() {
+    const material = new MeshStandardMaterial({ color: 0x00ff00 });
+    const floorShape = this.createShape();
+
+    this.createHole(floorShape, 0, 0);
+
+    const geometry = new ExtrudeGeometry(floorShape, {
+      steps: 1,
+      depth: 1,
+      bevelEnabled: true,
+      bevelThickness: 0.01,
+      bevelSize: 0,
+      bevelOffset: 0,
+      bevelSegments: 1
+    });
+
+    const mesh = new Mesh(geometry, material);
+    mesh.needsUpdate = true;
+
+    mesh.rotation.set(Math.PI * 0.5, 0, 0);
+    mesh.position.set(0, 1, 0);
+
+    this.scene.add(mesh);
   }
 
   addSphere({ x, y, z }) {
