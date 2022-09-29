@@ -1,6 +1,14 @@
 import './style.css';
-
+import * as THREE from 'three';
+import Stats from 'stats-js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import {
+  radians,
+  rgbToHex,
+} from './helpers';
+
+const {
   Scene,
   Object3D,
   Color,
@@ -19,32 +27,47 @@ import {
   ExtrudeGeometry,
   Vector2,
   Shape,
-  SphereBufferGeometry,
-} from 'three';
-import Stats from 'stats-js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import {
-  radians,
-  rgbToHex,
-} from './helpers';
+  SphereGeometry,
+} = THREE;
+
 class App {
   init() {
-    this.clearBody();
     this.setup();
     this.createScene();
     this.createCamera();
     this.addCameraControls();
     this.addAmbientLight();
     this.addDirectionalLight();
+    this.addPhysicsWorld();
     this.addFloor();
     this.addFloorGrid();
     this.addFloorHelper();
     this.addBox();
+    this.addSphere();
     this.addAxisHelper();
     this.addStatsMonitor();
     this.addWindowListeners();
     this.animate();
+  }
+
+  addPhysicsWorld() {
+    this.physics = {
+      fixedTimeStep: 1 / 60,
+      maxSubSteps: 10,
+      damping: .09,
+      time: .01,
+      lastTime: .01,
+    };
+
+    this.world = new CANNON.World();
+    this.world.gravity.set(0, -20, 0);
+    this.world.broadphase = new CANNON.NaiveBroadphase();
+    this.world.solver.iterations = 10;
+    this.world.defaultContactMaterial.contactEquationStiffness = 1e6;
+    this.world.defaultContactMaterial.contactEquationRelaxation = 3;
+    this.world.allowSleep = true;
+
+    this.cannonDebugRenderer = new CannonDebugRenderer(this.scene, this.world, { THREE, CANNON });
   }
 
   clearBody() {
@@ -56,16 +79,19 @@ class App {
   setup() {
     this.width = window.innerWidth;
     this.height = window.innerHeight;
+    this.debug = true;
 
     this.colors = {
       background: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
-      floor: '#ffffff',
+      floor: '#ff00ff',
       ball: '#5661ff',
       ambientLight: '#ffffff',
       directionalLight: '#ffffff',
     };
 
     this.meshes = {
+      container: new Object3D(),
+      spheres: [],
       sphereMaterial: new MeshStandardMaterial({
         color: this.colors.ball,
         metalness: .11,
@@ -177,6 +203,17 @@ class App {
     this.floor.rotateX(Math.PI / 2);
     this.floor.receiveShadow = true;
 
+    // physics floor
+    this.floor.body = new CANNON.Body({
+      mass: 0,
+      position: new CANNON.Vec3(0, 0, 5),
+      material: new CANNON.Material(),
+      shape: new CANNON.Plane(2, 2, 2),
+    });
+
+    this.floor.body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), radians(-90));
+    this.world.addBody(this.floor.body);
+
     this.scene.add(this.floor);
   }
 
@@ -236,15 +273,39 @@ class App {
     this.scene.add(mesh);
   }
 
-  addSphere({ x, y, z }) {
+  addSphere(x = 0, y = 2, z = 0) {
     const radius = 1, width = 32, height = 32;
-    const geometry = new SphereBufferGeometry(radius, width, height);
-    const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
+    const geometry = new SphereGeometry(radius, width, height);
 
+    const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
+    this.meshes.spheres.push(mesh);
+
     mesh.position.set(x, y, z);
+
+    // physics sphere
+    mesh.body = new CANNON.Body({
+      mass: 1,
+      material: new CANNON.Material(),
+      shape: new CANNON.Sphere(radius),
+      position: new CANNON.Vec3(x, y, z)
+    });
+
+
+    mesh.body.linearDamping = this.physics.damping;
+    mesh.body.fixedRotation = true;
+
+    this.world.addBody(mesh.body);
+
+    const contactMaterial = new CANNON.ContactMaterial(
+      this.floor.body.material,
+      mesh.body.material,
+      { friction: 0.3, restitution: 0.5 }
+    );
+
+    this.world.addContactMaterial(contactMaterial);
 
     this.scene.add(mesh);
   }
@@ -281,7 +342,22 @@ class App {
     this.stats.begin();
     this.orbitControl.update();
     this.renderer.render(this.scene, this.camera);
+
+    // physics loop
+    if (this.physics.lastTime !== undefined) {
+      // this.debug && this.cannonDebugRenderer.update();
+      var dt = (this.physics.time - this.physics.lastTime) / 1000;
+      this.world.step(this.physics.fixedTimeStep, dt, this.physics.maxSubSteps);
+
+      // map physics position to threejs mesh position
+      this.meshes.spheres.forEach((s) => {
+        s.position.copy(s.body.position);
+        s.quaternion.copy(s.body.quaternion);
+      });
+    }
+
     this.stats.end();
+    this.physics.lastTime = this.physics.time;
 
     requestAnimationFrame(this.animate.bind(this));
   }
