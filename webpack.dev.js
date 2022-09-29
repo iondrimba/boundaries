@@ -14,7 +14,7 @@ module.exports = merge(common, {
     port: 9000,
     open: true,
     liveReload: true,
-    watchFiles: ['./src/index.html', './src/style.css'],
+    watchFiles: ['./src/index.html', './src/style.css', './src/app.js'],
   },
   optimization: {
     runtimeChunk: 'single',
