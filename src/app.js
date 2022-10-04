@@ -6,7 +6,6 @@ import Stats from 'stats-js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import {
-  radians,
   rgbToHex,
 } from './helpers';
 
@@ -15,6 +14,8 @@ const {
   Object3D,
   Color,
   WebGLRenderer,
+  MathUtils,
+  BoxGeometry,
   PCFSoftShadowMap,
   PerspectiveCamera,
   AxesHelper,
@@ -46,6 +47,7 @@ class App {
     this.addFloorHelper();
     this.addBox();
     this.addSphere();
+    this.addPropeller();
     this.addAxisHelper();
     this.addStatsMonitor();
     this.addWindowListeners();
@@ -86,6 +88,7 @@ class App {
     this.meshes = {
       container: new Object3D(),
       spheres: [],
+      propeller: null,
       sphereMaterial: new MeshStandardMaterial({
         color: this.colors.ball,
         metalness: .11,
@@ -122,8 +125,8 @@ class App {
 
   addCameraControls() {
     this.orbitControl = new OrbitControls(this.camera, this.renderer.domElement);
-    this.orbitControl.maxPolarAngle = radians(90);
-    this.orbitControl.maxAzimuthAngle = radians(40);
+    this.orbitControl.maxPolarAngle = MathUtils.degToRad(90);
+    this.orbitControl.maxAzimuthAngle = MathUtils.degToRad(40);
     this.orbitControl.enableDamping = true;
     this.orbitControl.dampingFactor = 0.02;
 
@@ -205,7 +208,7 @@ class App {
       shape: new CANNON.Plane(2, 2, 2),
     });
 
-    this.floor.body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), radians(-90));
+    this.floor.body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), MathUtils.degToRad(-90));
     this.world.addBody(this.floor.body);
 
     this.scene.add(this.floor);
@@ -267,8 +270,36 @@ class App {
     this.scene.add(mesh);
   }
 
-  addSphere(x = 0, y = 4, z = 0) {
-    const radius = 1, width = 32, height = 32;
+  addPropeller() {
+    const width = 5, height = 1, depth = .1;
+    const geometry = new BoxGeometry(width, height, depth);
+
+    const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.position.set(0, height * .5, 0);
+
+    // physics obstacle
+    mesh.body = new CANNON.Body({
+      mass: 0,
+      material: new CANNON.Material(),
+      shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, depth * .5)),
+      position: new CANNON.Vec3(0,height * .5,0),
+    });
+
+    mesh.body.quaternion.setFromAxisAngle(
+      new CANNON.Vec3(0, 0, -1),
+      MathUtils.degToRad(0)
+    );
+    this.world.addBody(mesh.body);
+
+    this.meshes.propeller = mesh;
+
+    this.scene.add(mesh);
+  }
+
+  addSphere(x = 0, y = 4, z = 1) {
+    const radius = .2, width = 32, height = 32;
     const geometry = new SphereGeometry(radius, width, height);
 
     const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
@@ -336,12 +367,17 @@ class App {
     this.stats.begin();
     this.orbitControl.update();
 
+    this.meshes.propeller.rotation.y += .05;
+
     this.debug && this.cannonDebugRenderer.update();
     this.world.fixedStep()
     this.meshes.spheres.forEach((s) => {
       s.position.copy(s.body.position);
       s.quaternion.copy(s.body.quaternion);
     });
+
+    this.meshes.propeller.body.position.copy(this.meshes.propeller.position);
+    this.meshes.propeller.body.quaternion.copy(this.meshes.propeller.quaternion);
 
     this.renderer.render(this.scene, this.camera);
 
