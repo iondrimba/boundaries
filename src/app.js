@@ -53,14 +53,6 @@ class App {
   }
 
   addPhysicsWorld() {
-    this.physics = {
-      fixedTimeStep: 1 / 60,
-      maxSubSteps: 10,
-      damping: .09,
-      time: .01,
-      lastTime: .01,
-    };
-
     this.world = new CANNON.World();
     this.world.gravity.set(0, -20, 0);
     this.world.broadphase = new CANNON.NaiveBroadphase();
@@ -275,7 +267,7 @@ class App {
     this.scene.add(mesh);
   }
 
-  addSphere(x = 0, y = 2, z = 0) {
+  addSphere(x = 0, y = 4, z = 0) {
     const radius = 1, width = 32, height = 32;
     const geometry = new SphereGeometry(radius, width, height);
 
@@ -296,7 +288,7 @@ class App {
     });
 
 
-    mesh.body.linearDamping = this.physics.damping;
+    mesh.body.linearDamping = 0.1;
     mesh.body.fixedRotation = true;
 
     this.world.addBody(mesh.body);
@@ -343,23 +335,17 @@ class App {
   animate() {
     this.stats.begin();
     this.orbitControl.update();
+
+    this.debug && this.cannonDebugRenderer.update();
+    this.world.fixedStep()
+    this.meshes.spheres.forEach((s) => {
+      s.position.copy(s.body.position);
+      s.quaternion.copy(s.body.quaternion);
+    });
+
     this.renderer.render(this.scene, this.camera);
 
-    // physics loop
-    if (this.physics.lastTime !== undefined) {
-      this.debug && this.cannonDebugRenderer.update();
-      var dt = (this.physics.time - this.physics.lastTime) / 1000;
-      this.world.step(this.physics.fixedTimeStep, dt, this.physics.maxSubSteps);
-
-      // map physics position to threejs mesh position
-      this.meshes.spheres.forEach((s) => {
-        s.position.copy(s.body.position);
-        s.quaternion.copy(s.body.quaternion);
-      });
-    }
-
     this.stats.end();
-    this.physics.lastTime = this.physics.time;
 
     requestAnimationFrame(this.animate.bind(this));
   }
