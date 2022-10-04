@@ -48,6 +48,7 @@ class App {
     this.addBox();
     this.addSphere();
     this.addPropeller();
+    this.addInnerBoudaries();
     this.addAxisHelper();
     this.addStatsMonitor();
     this.addWindowListeners();
@@ -56,11 +57,11 @@ class App {
 
   addPhysicsWorld() {
     this.world = new CANNON.World();
-    this.world.gravity.set(0, -20, 0);
+    this.world.gravity.set(0, -10, 0);
     this.world.broadphase = new CANNON.NaiveBroadphase();
     this.world.solver.iterations = 10;
     this.world.defaultContactMaterial.contactEquationStiffness = 1e6;
-    this.world.defaultContactMaterial.contactEquationRelaxation = 3;
+    // this.world.defaultContactMaterial.contactEquationRelaxation = 3;
     this.world.allowSleep = true;
 
     this.cannonDebugRenderer = new CannonDebugger(this.scene, this.world);
@@ -245,8 +246,50 @@ class App {
     shape.holes.push(holePath);
   }
 
+  addInnerBoudaries() {
+    const width = .3, height = 1, depth = .05;
+    const geometry = new BoxGeometry(width, height, depth);
+    const count = 60;
+
+    for (let index = 0; index < count; index++) {
+      const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
+      mesh.needsUpdate = false;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+
+      const l = 360 / count;
+      const pos = MathUtils.degToRad(l * index);
+      const distance = (1.48 * 2);
+      const sin = Math.sin(pos) * distance;
+      const cos = Math.cos(pos) * distance;
+      mesh.position.set(sin, height * .5, cos);
+
+      mesh.lookAt(0, height * .5, 0);
+
+      // physics obstacle
+      mesh.body = new CANNON.Body({
+        mass: 0,
+        material: new CANNON.Material(),
+        shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, depth * .5)),
+        position: new CANNON.Vec3(sin, height * .5, cos),
+      });
+
+      mesh.body.quaternion.copy(mesh.quaternion);
+
+      const mat = new CANNON.ContactMaterial(
+        this.meshes.spheres[0].body.material,
+        mesh.body.material,
+        { friction: 0, restitution: .9 }
+      );
+      this.world.addContactMaterial(mat);
+
+      this.world.addBody(mesh.body);
+      this.scene.add(mesh);
+    }
+  }
+
   addBox() {
-    const material = new MeshStandardMaterial({ color: 0x00ff00 });
+    const material = new MeshStandardMaterial({ color: 0x00ffff });
     const floorShape = this.createShape();
 
     this.createHole(floorShape, 0, 0);
@@ -271,7 +314,7 @@ class App {
   }
 
   addPropeller() {
-    const width = 5, height = 1, depth = .1;
+    const width = 5.8, height = 1, depth = .1;
     const geometry = new BoxGeometry(width, height, depth);
 
     const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
@@ -284,7 +327,7 @@ class App {
       mass: 0,
       material: new CANNON.Material(),
       shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, depth * .5)),
-      position: new CANNON.Vec3(0,height * .5,0),
+      position: new CANNON.Vec3(0, height * .5, 0),
     });
 
     mesh.body.quaternion.setFromAxisAngle(
@@ -293,12 +336,19 @@ class App {
     );
     this.world.addBody(mesh.body);
 
+    const mat = new CANNON.ContactMaterial(
+      this.meshes.spheres[0].body.material,
+      mesh.body.material,
+      { friction: 0, restitution: 0.9 }
+    );
+    this.world.addContactMaterial(mat);
+
     this.meshes.propeller = mesh;
 
     this.scene.add(mesh);
   }
 
-  addSphere(x = 0, y = 4, z = 1) {
+  addSphere(x = 0, y = 1, z = 1) {
     const radius = .2, width = 32, height = 32;
     const geometry = new SphereGeometry(radius, width, height);
 
@@ -319,15 +369,15 @@ class App {
     });
 
 
-    mesh.body.linearDamping = 0.1;
-    mesh.body.fixedRotation = true;
+    mesh.body.linearDamping = .1;
+    // mesh.body.fixedRotation = true;
 
     this.world.addBody(mesh.body);
 
     const contactMaterial = new CANNON.ContactMaterial(
       this.floor.body.material,
       mesh.body.material,
-      { friction: 0.3, restitution: 0.5 }
+      { friction: 0, restitution: 0.9 }
     );
 
     this.world.addContactMaterial(contactMaterial);
@@ -367,7 +417,7 @@ class App {
     this.stats.begin();
     this.orbitControl.update();
 
-    this.meshes.propeller.rotation.y += .05;
+    this.meshes.propeller.rotation.y += .03;
 
     this.debug && this.cannonDebugRenderer.update();
     this.world.fixedStep()
