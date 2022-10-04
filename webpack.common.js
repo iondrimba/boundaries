@@ -23,7 +23,6 @@ module.exports = {
     new CopyPlugin({
       patterns: [
         { from: './src/assets', to: 'assets' },
-        { from: './src/vendor', to: 'vendor' },
       ],
     }),
     new CleanWebpackPlugin(),
