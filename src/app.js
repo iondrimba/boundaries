@@ -1,5 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
+import CannonDebugger from 'cannon-es-debugger';
 import Stats from 'stats-js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -67,7 +69,7 @@ class App {
     this.world.defaultContactMaterial.contactEquationRelaxation = 3;
     this.world.allowSleep = true;
 
-    this.cannonDebugRenderer = new CannonDebugRenderer(this.scene, this.world, { THREE, CANNON });
+    this.cannonDebugRenderer = new CannonDebugger(this.scene, this.world);
   }
 
   clearBody() {
@@ -345,7 +347,7 @@ class App {
 
     // physics loop
     if (this.physics.lastTime !== undefined) {
-      // this.debug && this.cannonDebugRenderer.update();
+      this.debug && this.cannonDebugRenderer.update();
       var dt = (this.physics.time - this.physics.lastTime) / 1000;
       this.world.step(this.physics.fixedTimeStep, dt, this.physics.maxSubSteps);
 
