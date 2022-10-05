@@ -46,8 +46,8 @@ class App {
     this.addFloorGrid();
     this.addFloorHelper();
     this.addBox();
-    this.addSphere();
     this.addPropeller();
+    this.addSpheres();
     this.addInnerBoudaries();
     this.addAxisHelper();
     this.addStatsMonitor();
@@ -61,7 +61,7 @@ class App {
     this.world.broadphase = new CANNON.NaiveBroadphase();
     this.world.solver.iterations = 10;
     this.world.defaultContactMaterial.contactEquationStiffness = 1e6;
-    // this.world.defaultContactMaterial.contactEquationRelaxation = 3;
+    this.world.defaultContactMaterial.contactEquationRelaxation = 3;
     this.world.allowSleep = true;
 
     this.cannonDebugRenderer = new CannonDebugger(this.scene, this.world);
@@ -76,7 +76,7 @@ class App {
   setup() {
     this.width = window.innerWidth;
     this.height = window.innerHeight;
-    this.debug = true;
+    this.debug = false;
 
     this.colors = {
       background: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
@@ -321,68 +321,109 @@ class App {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.position.set(0, height * .5, 0);
+    this.meshes.propeller = mesh;
 
     // physics obstacle
     mesh.body = new CANNON.Body({
       mass: 0,
-      material: new CANNON.Material(),
-      shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, depth * .5)),
+      material: new CANNON.Material({ friction: 1, restitution: .5 }),
+      shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, .1)),
       position: new CANNON.Vec3(0, height * .5, 0),
     });
 
-    mesh.body.quaternion.setFromAxisAngle(
-      new CANNON.Vec3(0, 0, -1),
-      MathUtils.degToRad(0)
-    );
+
     this.world.addBody(mesh.body);
-
-    const mat = new CANNON.ContactMaterial(
-      this.meshes.spheres[0].body.material,
-      mesh.body.material,
-      { friction: 0, restitution: 0.9 }
-    );
-    this.world.addContactMaterial(mat);
-
-    this.meshes.propeller = mesh;
 
     this.scene.add(mesh);
   }
 
-  addSphere(x = 0, y = 1, z = 1) {
+  addSpheres(x = 0, y = 1, z = 1) {
     const radius = .2, width = 32, height = 32;
     const geometry = new SphereGeometry(radius, width, height);
+    const halfsphere = new THREE.SphereGeometry(radius, 16, 16, 0, 3.15);
 
-    const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
-    this.meshes.spheres.push(mesh);
-
-    mesh.position.set(x, y, z);
-
-    // physics sphere
-    mesh.body = new CANNON.Body({
-      mass: 1,
-      material: new CANNON.Material(),
-      shape: new CANNON.Sphere(radius),
-      position: new CANNON.Vec3(x, y, z)
-    });
+    for (let index = 0; index < 5; index++) {
+      const sphere = new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({ color: "#ff00ff" })
+      );
 
 
-    mesh.body.linearDamping = .1;
-    // mesh.body.fixedRotation = true;
+      sphere.material.name = "sphere";
+      sphere.material.needsUpdate = true;
+      sphere.material.opacity = 0;
+      sphere.material.alphaTest = 1;
+      sphere.castShadow = true;
+      sphere.receiveShadow = true;
 
-    this.world.addBody(mesh.body);
+      const leftSide = new THREE.Mesh(
+        halfsphere,
+        new THREE.MeshPhysicalMaterial({
+          color: "#ffffff",
+          roughness: 1,
+          metalness: 1,
+          emissive: "#000000"
+        })
+      );
 
-    const contactMaterial = new CANNON.ContactMaterial(
-      this.floor.body.material,
-      mesh.body.material,
-      { friction: 0, restitution: 0.9 }
-    );
+      leftSide.rotation.y = MathUtils.degToRad(-90);
 
-    this.world.addContactMaterial(contactMaterial);
+      sphere.add(leftSide);
 
-    this.scene.add(mesh);
+      const rightSide = new THREE.Mesh(
+        halfsphere,
+        new THREE.MeshPhysicalMaterial({
+          color: "#00ff00",
+          roughness: 1,
+          metalness: 0,
+          emissive: "#000000"
+        })
+      );
+      rightSide.rotation.y = MathUtils.degToRad(90);
+
+      sphere.add(rightSide);
+
+
+      this.meshes.spheres.push(sphere);
+
+      sphere.position.set(x + index / 10, y, z + index / 10);
+
+      // physics sphere
+      sphere.body = new CANNON.Body({
+        mass: 1,
+        material: new CANNON.Material(),
+        shape: new CANNON.Sphere(radius),
+        position: new CANNON.Vec3(x + index / 10, y, z + index / 10)
+      });
+
+      sphere.body.linearDamping = .1;
+      sphere.body.fixedRotation = true;
+      sphere.body.material.name = "sphere";
+      sphere.body.fixedRotation = true;
+      sphere.body.sleepSpeedLimit = 0.1;
+      sphere.body.sleepTimeLimit = 0.5;
+
+      this.world.addBody(sphere.body);
+
+      const contactMaterial = new CANNON.ContactMaterial(
+        this.floor.body.material,
+        sphere.body.material,
+        { friction: 1, restitution: .5 }
+      );
+
+      this.world.addContactMaterial(contactMaterial);
+
+
+      const matp = new CANNON.ContactMaterial(
+        this.meshes.propeller.body.material,
+        sphere.body.material,
+        { friction: 0, restitution: 0 }
+      );
+
+      this.world.addContactMaterial(matp);
+
+      this.scene.add(sphere);
+    }
   }
 
   addWindowListeners() {
@@ -417,7 +458,7 @@ class App {
     this.stats.begin();
     this.orbitControl.update();
 
-    this.meshes.propeller.rotation.y += .03;
+    this.meshes.propeller.rotation.y += .01;
 
     this.debug && this.cannonDebugRenderer.update();
     this.world.fixedStep()
