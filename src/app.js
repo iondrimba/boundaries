@@ -239,7 +239,7 @@ class App {
   }
 
   createShape() {
-    const size = 5;
+    const size = 10;
     const vectors = [
       new Vector2(-size, size),
       new Vector2(-size, -size),
@@ -258,6 +258,8 @@ class App {
 
     holePath.moveTo(x, z);
     holePath.ellipse(x, z, radius, radius, 0, Math.PI * 2);
+
+    holePath.autoClose = true;
 
     shape.holes.push(holePath);
   }
@@ -314,20 +316,20 @@ class App {
     this.createHole(floorShape, 0, 0);
 
     const geometry = new ExtrudeGeometry(floorShape, {
-      steps: 1,
-      depth: 1,
+      depth: 0,
       bevelEnabled: true,
-      bevelThickness: 0.01,
+      bevelSegments: 1,
+      steps: 0,
       bevelSize: 0,
-      bevelOffset: 0,
-      bevelSegments: 1
+      bevelThickness: .5,
+      curveSegments: 32,
     });
 
     const mesh = new Mesh(geometry, material);
     mesh.needsUpdate = true;
 
     mesh.rotation.set(Math.PI * 0.5, 0, 0);
-    mesh.position.set(0, 1, 0);
+    mesh.position.set(0, .5, 0);
 
     this.scene.add(mesh);
   }
