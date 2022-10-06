@@ -14,6 +14,7 @@ const {
   Object3D,
   Color,
   WebGLRenderer,
+  Raycaster,
   MathUtils,
   BoxGeometry,
   PCFSoftShadowMap,
@@ -42,17 +43,26 @@ class App {
     this.addAmbientLight();
     this.addDirectionalLight();
     this.addPhysicsWorld();
+    this.addPointerDebugger();
     this.addFloor();
     this.addFloorGrid();
     this.addFloorHelper();
     this.addBox();
     this.addPropeller();
-    this.addSpheres();
     this.addInnerBoudaries();
     this.addAxisHelper();
     this.addStatsMonitor();
     this.addWindowListeners();
     this.animate();
+  }
+
+  addPointerDebugger() {
+    const material = new MeshStandardMaterial({ color: 0xff0000 });
+    const geometry = new SphereGeometry(.2, 16, 16);
+
+    this.pointerDebugger = new Mesh(geometry, material);
+
+    this.scene.add(this.pointerDebugger);
   }
 
   addPhysicsWorld() {
@@ -74,13 +84,15 @@ class App {
   }
 
   setup() {
+    this.raycaster = new Raycaster();
+    this.mouse3D = new Vector2();
     this.width = window.innerWidth;
     this.height = window.innerHeight;
     this.debug = false;
 
     this.colors = {
       background: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
-      floor: '#ff00ff',
+      floor: '#ffffff',
       ball: '#5661ff',
       ambientLight: '#ffffff',
       directionalLight: '#ffffff',
@@ -97,6 +109,10 @@ class App {
         roughness: .1,
       }),
     };
+
+    window.addEventListener('mousemove', this.onMouseMove.bind(this), { passive: true });
+    window.addEventListener('mousedown', this.onMouseDown.bind(this), { passive: true });
+    window.addEventListener('mouseup', this.onMouseUp.bind(this), { passive: true });
   }
 
   createScene() {
@@ -276,12 +292,15 @@ class App {
 
       mesh.body.quaternion.copy(mesh.quaternion);
 
-      const mat = new CANNON.ContactMaterial(
-        this.meshes.spheres[0].body.material,
-        mesh.body.material,
-        { friction: 0, restitution: .9 }
-      );
-      this.world.addContactMaterial(mat);
+
+      this.meshes.spheres.forEach(element => {
+        const mat = new CANNON.ContactMaterial(
+          element.body.material,
+          mesh.body.material,
+          { friction: 0, restitution: .9 }
+        );
+        this.world.addContactMaterial(mat);
+      });
 
       this.world.addBody(mesh.body);
       this.scene.add(mesh);
@@ -313,6 +332,24 @@ class App {
     this.scene.add(mesh);
   }
 
+  onMouseMove({ clientX, clientY }) {
+    this.mouse3D.x = (clientX / this.width) * 2 - 1;
+    this.mouse3D.y = -(clientY / this.height) * 2 + 1;
+  }
+
+  onMouseDown({ clientX, clientY }) {
+    this.mouse3D.x = (clientX / this.width) * 2 - 1;
+    this.mouse3D.y = -(clientY / this.height) * 2 + 1;
+
+    this.interval = setTimeout(() => {
+      this.addSpheres(this.pointerDebugger.position);
+    }, 10);
+  }
+
+  onMouseUp({ clientX, clientY }) {
+    clearTimeout(this.interval);
+  }
+
   addPropeller() {
     const width = 5.8, height = 1, depth = .1;
     const geometry = new BoxGeometry(width, height, depth);
@@ -337,17 +374,18 @@ class App {
     this.scene.add(mesh);
   }
 
-  addSpheres(x = 0, y = 1, z = 1) {
+  addSpheres(pointer) {
     const radius = .2, width = 32, height = 32;
     const geometry = new SphereGeometry(radius, width, height);
     const halfsphere = new THREE.SphereGeometry(radius, 16, 16, 0, 3.15);
 
-    for (let index = 0; index < 5; index++) {
+    for (let index = 0; index < 1; index++) {
       const sphere = new THREE.Mesh(
         geometry,
         new THREE.MeshStandardMaterial({ color: "#ff00ff" })
       );
 
+      this.meshes.spheres.push(sphere);
 
       sphere.material.name = "sphere";
       sphere.material.needsUpdate = true;
@@ -383,17 +421,14 @@ class App {
 
       sphere.add(rightSide);
 
-
-      this.meshes.spheres.push(sphere);
-
-      sphere.position.set(x + index / 10, y, z + index / 10);
+      sphere.position.set(pointer.x, 3, pointer.z);
 
       // physics sphere
       sphere.body = new CANNON.Body({
         mass: 1,
         material: new CANNON.Material(),
         shape: new CANNON.Sphere(radius),
-        position: new CANNON.Vec3(x + index / 10, y, z + index / 10)
+        position: new CANNON.Vec3(pointer.x, 3, pointer.z)
       });
 
       sphere.body.linearDamping = .1;
@@ -455,6 +490,16 @@ class App {
   }
 
   animate() {
+    this.raycaster.setFromCamera(this.mouse3D, this.camera);
+    const intersects = this.raycaster.intersectObjects([this.floor]);
+
+    if (intersects.length) {
+      const { x, y, z } = intersects[0].point;
+
+      this.pointerDebugger.position.set(x, y, z);
+    }
+
+
     this.stats.begin();
     this.orbitControl.update();
 
