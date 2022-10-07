@@ -5,6 +5,7 @@ import CannonDebugger from 'cannon-es-debugger';
 import Stats from 'stats-js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   rgbToHex,
 } from './helpers';
@@ -17,13 +18,17 @@ const {
   Raycaster,
   MathUtils,
   BoxGeometry,
+  MeshMatcapMaterial,
+  InstancedMesh,
   PCFSoftShadowMap,
+  DynamicDrawUsage,
   PerspectiveCamera,
   AxesHelper,
   AmbientLight,
   DirectionalLight,
   GridHelper,
   PlaneGeometry,
+  TextureLoader,
   MeshStandardMaterial,
   Mesh,
   DoubleSide,
@@ -44,9 +49,10 @@ class App {
     this.addDirectionalLight();
     this.addPhysicsWorld();
     this.addPointerDebugger();
+    this.loadMatCaps();
     this.addFloor();
     this.addFloorGrid();
-    this.addFloorHelper();
+    // this.addFloorHelper();
     this.addBox();
     this.addPropeller();
     this.addInnerBoudaries();
@@ -69,7 +75,7 @@ class App {
     this.world = new CANNON.World();
     this.world.gravity.set(0, -10, 0);
     this.world.broadphase = new CANNON.NaiveBroadphase();
-    this.world.solver.iterations = 10;
+    this.world.solver.iterations = 20;
     this.world.defaultContactMaterial.contactEquationStiffness = 1e6;
     this.world.defaultContactMaterial.contactEquationRelaxation = 3;
     this.world.allowSleep = true;
@@ -84,6 +90,7 @@ class App {
   }
 
   setup() {
+    this.velocity = .01;
     this.raycaster = new Raycaster();
     this.mouse3D = new Vector2();
     this.width = window.innerWidth;
@@ -93,6 +100,7 @@ class App {
     this.colors = {
       background: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
       floor: '#ffffff',
+      box: '#ffffff',
       ball: '#5661ff',
       ambientLight: '#ffffff',
       directionalLight: '#ffffff',
@@ -102,7 +110,7 @@ class App {
       container: new Object3D(),
       spheres: [],
       propeller: null,
-      sphereMaterial: new MeshStandardMaterial({
+      material: new MeshStandardMaterial({
         color: this.colors.ball,
         metalness: .11,
         emissive: 0x0,
@@ -113,6 +121,10 @@ class App {
     window.addEventListener('mousemove', this.onMouseMove.bind(this), { passive: true });
     window.addEventListener('mousedown', this.onMouseDown.bind(this), { passive: true });
     window.addEventListener('mouseup', this.onMouseUp.bind(this), { passive: true });
+  }
+
+  loadMatCaps() {
+    this.textureBox = new TextureLoader().load('./assets/matcap.png');
   }
 
   createScene() {
@@ -180,7 +192,7 @@ class App {
     this.directionalLight.shadow.camera.needsUpdate = true;
     this.directionalLight.shadow.mapSize.width = 2048;
     this.directionalLight.shadow.mapSize.height = 2048;
-    this.directionalLight.position.set(0, 13, 0);
+    this.directionalLight.position.set(0, 13, 10);
     this.directionalLight.target = target;
 
     this.directionalLight.shadow.camera.far = 1000;
@@ -196,8 +208,8 @@ class App {
   }
 
   addFloorGrid() {
-    const size = 20;
-    const divisions = 20;
+    const size = 40;
+    const divisions = 40;
     this.grid = new GridHelper(size, divisions, this.colors.grid, this.colors.grid);
 
     this.grid.position.set(0, 0, 0);
@@ -208,7 +220,7 @@ class App {
   }
 
   addFloor() {
-    const geometry = new PlaneGeometry(20, 20);
+    const geometry = new PlaneGeometry(40, 40);
     const material = new MeshStandardMaterial({ color: this.colors.floor, side: DoubleSide });
 
     this.floor = new Mesh(geometry, material);
@@ -239,7 +251,7 @@ class App {
   }
 
   createShape() {
-    const size = 10;
+    const size = 100;
     const vectors = [
       new Vector2(-size, size),
       new Vector2(-size, -size),
@@ -265,12 +277,21 @@ class App {
   }
 
   addInnerBoudaries() {
-    const width = .3, height = 1, depth = .05;
+    const width = .2, height = 1, depth = .2;
     const geometry = new BoxGeometry(width, height, depth);
-    const count = 60;
+    const count = 100;
+
+    const mm = new MeshMatcapMaterial({
+      color: this.colors.box,
+      matcap: this.textureBox
+    })
+
+    this.ringMesh = new InstancedMesh(geometry, this.meshes.material, count);
+    this.ringMesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.ringMesh.castShadow = true;
 
     for (let index = 0; index < count; index++) {
-      const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
+      const mesh = new Mesh(geometry, this.meshes.material);
       mesh.needsUpdate = false;
       mesh.castShadow = false;
       mesh.receiveShadow = false;
@@ -280,9 +301,12 @@ class App {
       const distance = (1.48 * 2);
       const sin = Math.sin(pos) * distance;
       const cos = Math.cos(pos) * distance;
-      mesh.position.set(sin, height * .5, cos);
 
+      mesh.position.set(sin, height * .5, cos);
       mesh.lookAt(0, height * .5, 0);
+      mesh.updateMatrix();
+
+      this.ringMesh.setMatrixAt(index, mesh.matrix);
 
       // physics obstacle
       mesh.body = new CANNON.Body({
@@ -294,7 +318,6 @@ class App {
 
       mesh.body.quaternion.copy(mesh.quaternion);
 
-
       this.meshes.spheres.forEach(element => {
         const mat = new CANNON.ContactMaterial(
           element.body.material,
@@ -305,8 +328,17 @@ class App {
       });
 
       this.world.addBody(mesh.body);
-      this.scene.add(mesh);
     }
+
+    const geometryfloor = new THREE.CircleGeometry(3, 32);
+    const circle = new THREE.Mesh(geometryfloor, this.meshes.material);
+    circle.receiveShadow = true;
+    circle.rotateX(-Math.PI / 2);
+    circle.position.set(0, 0.01, 0);
+    this.scene.add(circle);
+
+    this.ringMesh.instanceMatrix.needsUpdate = false;
+    this.scene.add(this.ringMesh);
   }
 
   addBox() {
@@ -325,13 +357,20 @@ class App {
       curveSegments: 32,
     });
 
-    const mesh = new Mesh(geometry, material);
-    mesh.needsUpdate = true;
+    const m = new MeshStandardMaterial({
+      color: '#ffffff',
+      metalness: .5,
+      emissive: 0x0,
+      roughness: 1,
+    });
 
+    const mesh = new Mesh(geometry, m);
+    mesh.needsUpdate = true;
+    mesh.receiveShadow = true;
     mesh.rotation.set(Math.PI * 0.5, 0, 0);
     mesh.position.set(0, .5, 0);
 
-    this.scene.add(mesh);
+    // this.scene.add(mesh);
   }
 
   onMouseMove({ clientX, clientY }) {
@@ -356,7 +395,7 @@ class App {
     const width = 5.8, height = 1, depth = .1;
     const geometry = new BoxGeometry(width, height, depth);
 
-    const mesh = new Mesh(geometry, this.meshes.sphereMaterial);
+    const mesh = new Mesh(geometry, this.meshes.material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.position.set(0, height * .5, 0);
@@ -505,7 +544,7 @@ class App {
     this.stats.begin();
     this.orbitControl.update();
 
-    this.meshes.propeller.rotation.y += .01;
+    this.meshes.propeller.rotation.y += this.velocity;
 
     this.debug && this.cannonDebugRenderer.update();
     this.world.fixedStep()
