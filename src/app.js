@@ -5,9 +5,10 @@ import CannonDebugger from 'cannon-es-debugger';
 import Stats from 'stats-js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import Tweakpane from 'tweakpane';
 import {
   rgbToHex,
+  hexToRgb,
 } from './helpers';
 
 const {
@@ -59,7 +60,38 @@ class App {
     this.addAxisHelper();
     this.addStatsMonitor();
     this.addWindowListeners();
+    this.addGuiControls();
     this.animate();
+  }
+
+  addGuiControls() {
+    this.pane = new Tweakpane();
+    this.guiColors = this.pane.addFolder({
+      title: "Colors",
+      expanded: true
+    });
+
+    this.guiColors.addInput(this.colors, "background").on("change", (evt) => {
+      this.floor.material.color = hexToRgb(evt.value);
+      document.body.style.backgroundColor = evt.value;
+      this.scene.background = new Color(evt.value);
+    });
+
+    this.guiColors.addInput(this.colors, "ring").on("change", (evt) => {
+      this.ringMesh.material.color = hexToRgb(evt.value);
+    });
+
+    this.guiColors.addInput(this.colors, "propeller").on("change", (evt) => {
+      this.meshes.propeller.material.color = hexToRgb(evt.value);
+    });
+
+    this.guiColors.addInput(this.colors, "leftSideSphere").on("change", (evt) => {
+      this.meshes.sphereLeftSideMaterial.color = hexToRgb(evt.value);
+    });
+
+    this.guiColors.addInput(this.colors, "rightSideSphere").on("change", (evt) => {
+      this.meshes.sphereRightSideMaterial.color = hexToRgb(evt.value);
+    });
   }
 
   addPointerDebugger() {
@@ -73,11 +105,11 @@ class App {
 
   addPhysicsWorld() {
     this.world = new CANNON.World();
-    this.world.gravity.set(0, -10, 0);
+    this.world.gravity.set(0, -40, 0);
     this.world.broadphase = new CANNON.NaiveBroadphase();
-    this.world.solver.iterations = 20;
+    this.world.solver.iterations = 10;
     this.world.defaultContactMaterial.contactEquationStiffness = 1e6;
-    this.world.defaultContactMaterial.contactEquationRelaxation = 3;
+    this.world.defaultContactMaterial.contactEquationRelaxation = 6;
     this.world.allowSleep = true;
 
     this.cannonDebugRenderer = new CannonDebugger(this.scene, this.world);
@@ -90,7 +122,7 @@ class App {
   }
 
   setup() {
-    this.velocity = .01;
+    this.velocity = .02;
     this.raycaster = new Raycaster();
     this.mouse3D = new Vector2();
     this.width = window.innerWidth;
@@ -99,11 +131,15 @@ class App {
 
     this.colors = {
       background: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
-      floor: '#ffffff',
+      floor: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
       box: '#ffffff',
-      ball: '#5661ff',
+      leftSideSphere: '#5661ff',
+      rightSideSphere: '#0dff00',
       ambientLight: '#ffffff',
       directionalLight: '#ffffff',
+      ring: '#ff0029',
+      propeller: '#ffffff',
+      grid: '#ffffff',
     };
 
     this.meshes = {
@@ -116,11 +152,24 @@ class App {
         emissive: 0x0,
         roughness: .1,
       }),
+      sphereBaseMaterial: new THREE.MeshStandardMaterial({ color: "#ff00ff" }),
+      sphereLeftSideMaterial: new THREE.MeshStandardMaterial({
+        color: this.colors.leftSideSphere,
+        metalness: .1,
+        emissive: 0x0,
+        roughness: .1,
+      }),
+      sphereRightSideMaterial: new THREE.MeshStandardMaterial({
+        color: this.colors.rightSideSphere,
+        metalness: .1,
+        emissive: 0x0,
+        roughness: .2,
+      }),
     };
 
     window.addEventListener('mousemove', this.onMouseMove.bind(this), { passive: true });
-    window.addEventListener('mousedown', this.onMouseDown.bind(this), { passive: true });
-    window.addEventListener('mouseup', this.onMouseUp.bind(this), { passive: true });
+    window.addEventListener('keydown', this.onMouseDown.bind(this), { passive: true });
+    window.addEventListener('keyup', this.onKeyup.bind(this), { passive: true });
   }
 
   loadMatCaps() {
@@ -147,7 +196,7 @@ class App {
 
   createCamera() {
     this.camera = new PerspectiveCamera(20, this.width / this.height, 1, 1000);
-    this.camera.position.set(0, 10, 50);
+    this.camera.position.set(0, 25, 20);
 
     this.scene.add(this.camera);
   }
@@ -208,19 +257,17 @@ class App {
   }
 
   addFloorGrid() {
-    const size = 40;
-    const divisions = 40;
+    const size = 100;
+    const divisions = 100;
     this.grid = new GridHelper(size, divisions, this.colors.grid, this.colors.grid);
 
     this.grid.position.set(0, 0, 0);
-    this.grid.material.opacity = 0;
-    this.grid.material.transparent = false;
 
     this.scene.add(this.grid);
   }
 
   addFloor() {
-    const geometry = new PlaneGeometry(40, 40);
+    const geometry = new PlaneGeometry(400, 400);
     const material = new MeshStandardMaterial({ color: this.colors.floor, side: DoubleSide });
 
     this.floor = new Mesh(geometry, material);
@@ -232,7 +279,7 @@ class App {
     // physics floor
     this.floor.body = new CANNON.Body({
       mass: 0,
-      position: new CANNON.Vec3(0, 0, 5),
+      position: new CANNON.Vec3(0, 0, 0),
       material: new CANNON.Material(),
       shape: new CANNON.Plane(2, 2, 2),
     });
@@ -281,17 +328,12 @@ class App {
     const geometry = new BoxGeometry(width, height, depth);
     const count = 100;
 
-    const mm = new MeshMatcapMaterial({
-      color: this.colors.box,
-      matcap: this.textureBox
-    })
-
-    this.ringMesh = new InstancedMesh(geometry, this.meshes.material, count);
+    this.ringMesh = new InstancedMesh(geometry, new MeshStandardMaterial({ color: this.colors.ring, side: DoubleSide }), count);
     this.ringMesh.instanceMatrix.setUsage(DynamicDrawUsage);
     this.ringMesh.castShadow = true;
 
     for (let index = 0; index < count; index++) {
-      const mesh = new Mesh(geometry, this.meshes.material);
+      const mesh = new Mesh(geometry, this.ringMesh.material);
       mesh.needsUpdate = false;
       mesh.castShadow = false;
       mesh.receiveShadow = false;
@@ -311,18 +353,26 @@ class App {
       // physics obstacle
       mesh.body = new CANNON.Body({
         mass: 0,
-        material: new CANNON.Material(),
+        material: new CANNON.Material({ friction: .3, restitution: .1 }),
         shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, depth * .5)),
         position: new CANNON.Vec3(sin, height * .5, cos),
       });
 
+      mesh.body.linearDamping = 1;
+      mesh.body.material.name = "boudaries";
+      mesh.body.force = new CANNON.Vec3(1, 1, 1);
+      mesh.body.fixedRotation = true;
+      mesh.body.collisionResponse = true;
+      mesh.body.updateMassProperties();
+      mesh.body.sleepSpeedLimit = 0;
+      mesh.body.sleepTimeLimit = 0;
       mesh.body.quaternion.copy(mesh.quaternion);
 
       this.meshes.spheres.forEach(element => {
         const mat = new CANNON.ContactMaterial(
           element.body.material,
           mesh.body.material,
-          { friction: 0, restitution: .9 }
+          { friction: .3, restitution: .9 }
         );
         this.world.addContactMaterial(mat);
       });
@@ -331,7 +381,7 @@ class App {
     }
 
     const geometryfloor = new THREE.CircleGeometry(3, 32);
-    const circle = new THREE.Mesh(geometryfloor, this.meshes.material);
+    const circle = new THREE.Mesh(geometryfloor, this.ringMesh.material);
     circle.receiveShadow = true;
     circle.rotateX(-Math.PI / 2);
     circle.position.set(0, 0.01, 0);
@@ -378,21 +428,21 @@ class App {
     this.mouse3D.y = -(clientY / this.height) * 2 + 1;
   }
 
-  onMouseDown({ clientX, clientY }) {
-    this.mouse3D.x = (clientX / this.width) * 2 - 1;
-    this.mouse3D.y = -(clientY / this.height) * 2 + 1;
+  onMouseDown({ code }) {
 
-    this.interval = setTimeout(() => {
-      this.addSpheres(this.pointerDebugger.position);
-    }, 10);
+    if (code.toLowerCase() === "space") {
+      this.interval = setTimeout(() => {
+        this.addSpheres(this.pointerDebugger.position);
+      }, 10);
+    }
   }
 
-  onMouseUp({ clientX, clientY }) {
+  onKeyup() {
     clearTimeout(this.interval);
   }
 
   addPropeller() {
-    const width = 5.8, height = 1, depth = .1;
+    const width = 4.8, height = 1, depth = .1;
     const geometry = new BoxGeometry(width, height, depth);
 
     const mesh = new Mesh(geometry, this.meshes.material);
@@ -404,11 +454,14 @@ class App {
     // physics obstacle
     mesh.body = new CANNON.Body({
       mass: 0,
-      material: new CANNON.Material({ friction: 1, restitution: .5 }),
-      shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, .1)),
+      force: new CANNON.Vec3(10, 10, 1),
+      material: new CANNON.Material({ friction: .3, restitution: .1 }),
+      shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, .3)),
       position: new CANNON.Vec3(0, height * .5, 0),
+      collisionResponse: true,
     });
 
+    mesh.body.volume = 10;
 
     this.world.addBody(mesh.body);
 
@@ -421,84 +474,73 @@ class App {
     const halfsphere = new THREE.SphereGeometry(radius, 16, 16, 0, 3.15);
 
     for (let index = 0; index < 1; index++) {
-      const sphere = new THREE.Mesh(
+      const mesh = new THREE.Mesh(
         geometry,
-        new THREE.MeshStandardMaterial({ color: "#ff00ff" })
+        this.meshes.sphereBaseMaterial,
       );
 
-      this.meshes.spheres.push(sphere);
+      this.meshes.spheres.push(mesh);
 
-      sphere.material.name = "sphere";
-      sphere.material.needsUpdate = true;
-      sphere.material.opacity = 0;
-      sphere.material.alphaTest = 1;
-      sphere.castShadow = true;
-      sphere.receiveShadow = true;
+      mesh.material.name = "sphere";
+      mesh.material.needsUpdate = false;
+      mesh.material.opacity = 0;
+      mesh.material.alphaTest = 1;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
 
       const leftSide = new THREE.Mesh(
         halfsphere,
-        new THREE.MeshPhysicalMaterial({
-          color: "#ffffff",
-          roughness: 1,
-          metalness: 1,
-          emissive: "#000000"
-        })
+        this.meshes.sphereLeftSideMaterial,
       );
 
       leftSide.rotation.y = MathUtils.degToRad(-90);
 
-      sphere.add(leftSide);
+      mesh.add(leftSide);
 
       const rightSide = new THREE.Mesh(
         halfsphere,
-        new THREE.MeshPhysicalMaterial({
-          color: "#00ff00",
-          roughness: 1,
-          metalness: 0,
-          emissive: "#000000"
-        })
+        this.meshes.sphereRightSideMaterial,
       );
       rightSide.rotation.y = MathUtils.degToRad(90);
 
-      sphere.add(rightSide);
+      mesh.add(rightSide);
 
-      sphere.position.set(pointer.x, 3, pointer.z);
+      mesh.position.set(pointer.x, 10, pointer.z);
 
-      // physics sphere
-      sphere.body = new CANNON.Body({
+      // physics mesh
+      mesh.body = new CANNON.Body({
         mass: 1,
         material: new CANNON.Material(),
         shape: new CANNON.Sphere(radius),
-        position: new CANNON.Vec3(pointer.x, 3, pointer.z)
+        position: new CANNON.Vec3(pointer.x, mesh.position.y, pointer.z),
+        dampingFactor: 1,
+        sleepSpeedLimit: 1,
+        sleepTimeLimit: 1,
       });
 
-      sphere.body.linearDamping = .1;
-      sphere.body.fixedRotation = true;
-      sphere.body.material.name = "sphere";
-      sphere.body.fixedRotation = true;
-      sphere.body.sleepSpeedLimit = 0.1;
-      sphere.body.sleepTimeLimit = 0.5;
+      mesh.body.material.name = "sphere";
+      mesh.body.fixedRotation = true;
+      mesh.body.collisionResponse = true;
 
-      this.world.addBody(sphere.body);
+      this.world.addBody(mesh.body);
 
       const contactMaterial = new CANNON.ContactMaterial(
         this.floor.body.material,
-        sphere.body.material,
-        { friction: 1, restitution: .5 }
+        mesh.body.material,
+        { friction: 1, restitution: .6 }
       );
 
       this.world.addContactMaterial(contactMaterial);
 
-
       const matp = new CANNON.ContactMaterial(
         this.meshes.propeller.body.material,
-        sphere.body.material,
-        { friction: 0, restitution: 0 }
+        mesh.body.material,
+        { friction: 1, restitution: .5 }
       );
 
       this.world.addContactMaterial(matp);
 
-      this.scene.add(sphere);
+      this.scene.add(mesh);
     }
   }
 
@@ -544,17 +586,25 @@ class App {
     this.stats.begin();
     this.orbitControl.update();
 
-    this.meshes.propeller.rotation.y += this.velocity;
+    this.meshes.propeller.rotation.y -= this.velocity;
 
     this.debug && this.cannonDebugRenderer.update();
-    this.world.fixedStep()
-    this.meshes.spheres.forEach((s) => {
+    this.meshes.spheres.forEach((s, index) => {
       s.position.copy(s.body.position);
       s.quaternion.copy(s.body.quaternion);
+
+      if (s.body.position.distanceTo(this.meshes.propeller.body.position) > 20) {
+        this.world.removeBody(s.body);
+        this.scene.remove(s);
+
+        this.meshes.spheres.splice(index, 1);
+      }
     });
 
     this.meshes.propeller.body.position.copy(this.meshes.propeller.position);
     this.meshes.propeller.body.quaternion.copy(this.meshes.propeller.quaternion);
+
+    this.world.fixedStep();
 
     this.renderer.render(this.scene, this.camera);
 
