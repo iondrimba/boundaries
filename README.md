@@ -1,27 +1,15 @@
-# :flying_saucer: Threejs Starter
+# Boundaries
 
-Basic setup for quick prototyping
+Playing with Threejs and Cannonjs
 
-[![Node.js CI](https://github.com/iondrimba/threejs-starter/actions/workflows/node.yml/badge.svg)](https://github.com/iondrimba/threejs-starter/actions/workflows/node.yml)
+![Image Title](https://raw.githubusercontent.com/iondrimba/images/master/boundaries.webp)
 
-![Image Title](https://raw.githubusercontent.com/iondrimba/images/master/threejs-starter.gif)
-
-## [Demo](https://iondrimba.github.io/threejs-starter/public/index.html)
-
-## Includes
-
-* Threejs main entities via modules
-* Camera controls (OrbitControls and TransformControls)
-* Basic lightning setup
-* Live reload
-* Color helpers (rgbToHex and hexToRgb)
-* Math helpers degrees to radians
-* Stats js setup for monitoring
-* Github Action for CI validation
+## [Demo](https://iondrimba.github.io/boundaries/public/index.html)
 
 ## Credits
 
 * [Threejs](https://threejs.org/)
+* [Inspired by https://www.instagram.com/p/CErzmIRpP6E/](https://www.instagram.com/p/CErzmIRpP6E/)
 
 ## Find me @
 
