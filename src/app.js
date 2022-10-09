@@ -122,12 +122,12 @@ class App {
   }
 
   setup() {
-    this.velocity = .02;
+    this.velocity = 0.05;
     this.raycaster = new Raycaster();
     this.mouse3D = new Vector2();
     this.width = window.innerWidth;
     this.height = window.innerHeight;
-    this.debug = false;
+    this.debug = true;
 
     this.colors = {
       background: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
@@ -446,26 +446,49 @@ class App {
     const geometry = new BoxGeometry(width, height, depth);
 
     const mesh = new Mesh(geometry, this.meshes.material);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.position.set(0, height * .5, 0);
     this.meshes.propeller = mesh;
 
+    mesh.container = new Object3D();
+    mesh.dummies = [];
+
+    const w = .1;
+
+    for (let index = 0; index < 50; index++) {
+      const dummie = new Mesh(new BoxGeometry(.2, height, depth), this.meshes.material);
+      dummie.position.set((w * index) - (width * .48), height * .5, 0);
+      mesh.dummies.push(dummie);
+      mesh.container.add(dummie);
+      dummie.castShadow = true;
+      dummie.receiveShadow = true;
+
+      dummie.body = new CANNON.Body({
+        mass: 0,
+        force: new CANNON.Vec3(10, 10, 1),
+        material: new CANNON.Material({ friction: .3, restitution: .1 }),
+        shape: new CANNON.Box(new CANNON.Vec3(.1, height * .5, depth * .5)),
+        position: new CANNON.Vec3((w * index) - (width * .48), height * .5, 0),
+        collisionResponse: true,
+        volume: 1,
+      });
+
+      this.world.addBody(dummie.body);
+    }
+
     // physics obstacle
-    mesh.body = new CANNON.Body({
-      mass: 0,
-      force: new CANNON.Vec3(10, 10, 1),
-      material: new CANNON.Material({ friction: .3, restitution: .1 }),
-      shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, .3)),
-      position: new CANNON.Vec3(0, height * .5, 0),
-      collisionResponse: true,
-    });
+    // mesh.body = new CANNON.Body({
+    //   mass: 0,
+    //   force: new CANNON.Vec3(10, 10, 1),
+    //   material: new CANNON.Material({ friction: .3, restitution: .1 }),
+    //   shape: new CANNON.Box(new CANNON.Vec3(width * .5, height * .5, .3)),
+    //   position: new CANNON.Vec3(0, height * .5, 0),
+    //   collisionResponse: true,
+    // });
 
-    mesh.body.volume = 10;
+    // mesh.body.volume = 10;
 
-    this.world.addBody(mesh.body);
+    // this.world.addBody(mesh.body);
 
-    this.scene.add(mesh);
+    this.scene.add(mesh.container);
   }
 
   addSpheres(pointer) {
@@ -505,7 +528,7 @@ class App {
 
       mesh.add(rightSide);
 
-      mesh.position.set(pointer.x, 10, pointer.z);
+      mesh.position.set(pointer.x, 0, pointer.z);
 
       // physics mesh
       mesh.body = new CANNON.Body({
@@ -520,7 +543,7 @@ class App {
 
       mesh.body.material.name = "sphere";
       mesh.body.fixedRotation = true;
-      mesh.body.collisionResponse = true;
+      // mesh.body.collisionResponse = true;
 
       this.world.addBody(mesh.body);
 
@@ -532,13 +555,15 @@ class App {
 
       this.world.addContactMaterial(contactMaterial);
 
-      const matp = new CANNON.ContactMaterial(
-        this.meshes.propeller.body.material,
-        mesh.body.material,
-        { friction: 1, restitution: .5 }
-      );
+      this.meshes.propeller.dummies.forEach(element => {
+        const matp = new CANNON.ContactMaterial(
+          element.body.material,
+          mesh.body.material,
+          { friction: .1, restitution: .1 }
+        );
 
-      this.world.addContactMaterial(matp);
+        this.world.addContactMaterial(matp);
+      });
 
       this.scene.add(mesh);
     }
@@ -586,14 +611,14 @@ class App {
     this.stats.begin();
     this.orbitControl.update();
 
-    this.meshes.propeller.rotation.y -= this.velocity;
+    this.meshes.propeller.container.rotation.y -= this.velocity;
 
     this.debug && this.cannonDebugRenderer.update();
     this.meshes.spheres.forEach((s, index) => {
       s.position.copy(s.body.position);
       s.quaternion.copy(s.body.quaternion);
 
-      if (s.body.position.distanceTo(this.meshes.propeller.body.position) > 20) {
+      if (s.body.position.distanceTo(this.meshes.propeller.container.position) > 20) {
         this.world.removeBody(s.body);
         this.scene.remove(s);
 
@@ -601,8 +626,15 @@ class App {
       }
     });
 
-    this.meshes.propeller.body.position.copy(this.meshes.propeller.position);
-    this.meshes.propeller.body.quaternion.copy(this.meshes.propeller.quaternion);
+
+    // this.meshes.propeller.dummies.forEach((dummie, index) => {
+    //   const position = dummie.getWorldPosition(new THREE.Vector3());
+    //   const quaternion = dummie.getWorldQuaternion(new THREE.Quaternion());
+
+    //   dummie.body.position.copy(position);
+    //   dummie.body.quaternion.copy(quaternion);
+
+    // });
 
     this.world.fixedStep();
 
