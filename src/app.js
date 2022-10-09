@@ -113,18 +113,12 @@ class App {
     this.world = new CANNON.World();
     this.world.gravity.set(0, -40, .5);
     this.world.broadphase = new CANNON.NaiveBroadphase();
-    this.world.solver.iterations = 10;
+    this.world.solver.iterations = 20;
     this.world.defaultContactMaterial.contactEquationStiffness = 1e6;
-    this.world.defaultContactMaterial.contactEquationRelaxation = 6;
+    this.world.defaultContactMaterial.contactEquationRelaxation = 10;
     this.world.allowSleep = true;
 
     this.cannonDebugRenderer = new CannonDebugger(this.scene, this.world);
-  }
-
-  clearBody() {
-    while (document.body.childNodes.length) {
-      document.body.removeChild(document.body.lastChild);
-    }
   }
 
   setup() {
@@ -223,10 +217,18 @@ class App {
 
   addCameraControls() {
     this.orbitControl = new OrbitControls(this.camera, this.renderer.domElement);
-    this.orbitControl.maxPolarAngle = MathUtils.degToRad(90);
-    this.orbitControl.maxAzimuthAngle = MathUtils.degToRad(40);
     this.orbitControl.enableDamping = true;
     this.orbitControl.dampingFactor = 0.02;
+    this.orbitControl.maxDistance = 60;
+    this.orbitControl.minDistance = 30;
+    this.orbitControl.minPolarAngle = THREE.MathUtils.degToRad(0);
+    this.orbitControl.maxPolarAngle = THREE.MathUtils.degToRad(70);
+    this.orbitControl.minAzimuthAngle = THREE.MathUtils.degToRad(-90);
+    this.orbitControl.maxAzimuthAngle = THREE.MathUtils.degToRad(90);
+    this.orbitControl.enablePan = !this.cameraAutoAnimate;
+    this.orbitControl.enableRotate = !this.cameraAutoAnimate;
+    this.orbitControl.enableZoom = !this.cameraAutoAnimate;
+    this.orbitControl.saveState();
 
     document.body.style.cursor = '-moz-grabg';
     document.body.style.cursor = '-webkit-grab';
