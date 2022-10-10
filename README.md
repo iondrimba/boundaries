@@ -2,7 +2,7 @@
 
 Playing with Threejs and Cannonjs
 
-![Image Title](https://raw.githubusercontent.com/iondrimba/images/master/boundaries.webp)
+![Image Title](https://raw.githubusercontent.com/iondrimba/images/master/boundaries.gif)
 
 ## [Demo](https://iondrimba.github.io/boundaries/public/index.html)
 
