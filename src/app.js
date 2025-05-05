@@ -122,6 +122,7 @@ class App {
   }
 
   setup() {
+    this.lastTime = 0;
     this.velocity = .015;
     this.raycaster = new Raycaster();
     this.mouse3D = new Vector2();
@@ -561,6 +562,7 @@ class App {
   }
 
   animate() {
+    var currentTime = Date.now();
     this.raycaster.setFromCamera(this.mouse3D, this.camera);
     const intersects = this.raycaster.intersectObjects([this.floor]);
 
@@ -570,32 +572,40 @@ class App {
       this.pointerDebugger.position.set(x, y, z);
     }
 
-
     this.stats.begin();
     this.orbitControl.update();
 
-    this.meshes.propeller.rotation.y -= this.velocity;
+    if (currentTime - this.lastTime > 1000 / 70) {
+      this.debug && this.cannonDebugRenderer.update();
+      const dt = (currentTime - this.lastTime) / 1000;
+      this.world.step(1 / 60, dt, 3);
 
-    this.debug && this.cannonDebugRenderer.update();
-    this.meshes.spheres.forEach((s, index) => {
-      s.position.copy(s.body.position);
-      s.quaternion.copy(s.body.quaternion);
+      this.meshes.propeller.rotation.y -= this.velocity;
 
-      if (s.body.position.distanceTo(this.meshes.propeller.body.position) > 20) {
-        this.world.removeBody(s.body);
-        this.scene.remove(s);
+      this.debug && this.cannonDebugRenderer.update();
+      this.meshes.spheres.forEach((s, index) => {
+        s.position.copy(s.body.position);
+        s.quaternion.copy(s.body.quaternion);
 
-        this.meshes.spheres.splice(index, 1);
-      }
-    });
+        if (
+          s.body.position.distanceTo(this.meshes.propeller.body.position) > 20
+        ) {
+          this.world.removeBody(s.body);
+          this.scene.remove(s);
 
-    this.meshes.propeller.body.position.copy(this.meshes.propeller.position);
-    this.meshes.propeller.body.quaternion.copy(this.meshes.propeller.quaternion);
+          this.meshes.spheres.splice(index, 1);
+        }
+      });
 
-    this.world.fixedStep();
+      this.meshes.propeller.body.position.copy(this.meshes.propeller.position);
+      this.meshes.propeller.body.quaternion.copy(
+        this.meshes.propeller.quaternion
+      );
+
+      this.lastTime = Date.now();
+    }
 
     this.renderer.render(this.scene, this.camera);
-
     this.stats.end();
 
     requestAnimationFrame(this.animate.bind(this));
